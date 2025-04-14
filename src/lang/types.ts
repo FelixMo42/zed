@@ -1,262 +1,186 @@
-import { format, log_types } from "../util/format.ts";
-import { FuncSSA, Module, StatmentSSA } from "./lower.ts";
-import { ExprNode, StatmentNode, TypeNode } from "./parse.ts";
+import { Expr, FileNode } from "./parse.ts";
 
-/// Common
-
-export type Types = Map<string | ExprNode, TypeNode>
-
-export const IntType: TypeNode = Type("int")
-export const VoidType: TypeNode = Type("void")
-export const BoolType: TypeNode = Type("bool")
-
-export function Type(name: string, ...args: TypeNode[]): TypeNode {
-    if (typeof name === "object") {
-        return name
-    }
-
-    return { kind: "TYPE_NODE", name, args }
+export type Type = {
+    kind: "TYPE",
+    name: string,
+    args: Type[],
+    with: string[]
 }
 
-function eq(a: object, b: object) {
-    return JSON.stringify(a) === JSON.stringify(b)
-}
+function root() {
+    const types = new Map<string, Type>()
 
-/// Global
-
-export function build_module_types(file: Module): Types {
-    const types = new Map<string, TypeNode>()
-
-    file.items.forEach((n) => {
-        if (n.kind === "FUNC_SSA") {
-            types.set(n.name, Type("Fn",
-                Type("Tuple", ...n.params.map((p) => p.type)),
-                n.return,
-            ))
-        } else if (n.kind === "STRUCT_NODE") {
-            types.set(n.name, Type("@struct",
-                ...n.fields.values().map(field =>
-                    Type(field.name, field.type)
-                )
-            ))
-
-            for (const f of n.fields.values()) {
-                types.set(`${n.name}::${f.name}`, f.type)
-            }
-        } else {
-            throw new Error("Unsupported top level node!")
-        }
-    })
+    types.set("+", Type("@fn", [ Type("int"), Type("int"), Type("int") ]))
+    types.set("-", Type("@fn", [ Type("int"), Type("int"), Type("int") ]))
+    types.set("*", Type("@fn", [ Type("int"), Type("int"), Type("int") ]))
+    types.set("/", Type("@fn", [ Type("int"), Type("int"), Type("int") ]))
+    types.set("**", Type("@fn", [ Type("int"), Type("int"), Type("int") ]))
+    types.set("sqrt", Type("@fn", [ Type("int"), Type("int") ]))
+    types.set("array", Type("@fn", [
+        Type("#1"), Type("#1"),
+        Type("@fn", [ Type("int"), Type("#1") ])
+    ], ["#1"]))
 
     return types
 }
 
-/// Locals
-
 interface Ctx {
-    unknowns: number
-    func: FuncSSA
-    tmap: Types
+    types: Map<string, Type>
+    links: [Type, Type][]
+    scope: string
 }
 
+export function types(file: FileNode) {
+    const types = new Map<string, Type>()
+    const links: [Type, Type][] = []
 
-function newUnknow(c: Ctx) {
-    return Type(`Unknown::${c.unknowns++}`)
-}
-
-export function isUnknow(t: TypeNode) {
-    return t.name.startsWith("Unknown::")
-}
-
-function set_type(c: Ctx, n: ExprNode | StatmentNode | TypeNode, t: TypeNode) {
-    if (n.kind === "TYPE_NODE") {
-        if (isUnknow(n)) {
-            c.tmap.set(format(n), t)
-        }
-        
-        if (isUnknow(t)) {
-            c.tmap.set(format(t), n)
-        }
-
-        if (!isUnknow(n) && !isUnknow(t)) {
-            if (!eq(n, t)) {
-                throw new Error("Type missmatch!")
-            }
-        }
-    } else if (n.kind === "NUMBER_NODE") {
-        if (!eq(t, IntType)) {
-            throw new Error("Type missmatch!")
-        }
-    } else if (n.kind === "IDENT_NODE") {
-        const type = c.tmap.get(n.value)
-
-        if (!type) {
-            c.tmap.set(n.value, t)
-            return
-        } else if (isUnknow(type)) {
-            c.tmap.set(format(type), t)
-        } else if (!eq(type, t)) {
-            throw new Error(`Type missmatch: ${format(t)} != ${format(type)}`)
-        }
-    } else if (n.kind === "CALL_NODE") {
-        const type_signature = get_type(c, n.func)
-
-        if (type_signature.name != "Fn" && type_signature.args.length !== 2) {
-            throw new Error("Uncallable!")
-        }
-
-        if (!eq(t, type_signature.args[1])) {
-            throw new Error(`Type missmatch: ${format(t)} != ${format(type_signature.args[1])}`)
-        }
-    } else if (n.kind === "OBJECT_NODE") {
-        c.tmap.set(n, t)
-    } else if (n.kind === "OP_NODE") {
-        // this is waiting for an ssa refactor
-    } else if (n.kind === "FIELD_NODE") {
-        // todo: type check!
-    } else if (n.kind === "TERNARY_NODE") {
-        // blah
-    } else if (n.kind === "ARRAY_NODE") {
-        // todo: array types!
-        // this is gonna involve abstruct types
-    } else {
-        throw new Error(`set_type::implement::${n.kind}`)
+    const r = root()
+    for (const [k, v] of r.entries()) {
+        types.set(k, v)
     }
-}
 
-function get_type(c: Ctx, n: ExprNode | StatmentSSA | undefined, e?: TypeNode): TypeNode {
-    if (n == undefined) return newUnknow(c)
+    for (const func of file.items) {
+        const scope = func.name
+        const param_types = func.params.map(new_unknown)
+        const return_type = new_unknown()
 
-    if (n.kind === "NUMBER_NODE") {
-        return IntType
-    } else if (n.kind === "IDENT_NODE") {
-        if (c.tmap.has(n.value)) {
-            return c.tmap.get(n.value)!
+        types.set(`${scope}`, Type("@fn", [...param_types, return_type]))
+
+        for (let i = 0; i < func.params.length; i++) {
+            types.set(`${scope}::${func.params[i]}`, param_types[i])
         }
-
-        if (e) {
-            c.tmap.set(n.value, e)
-            return e
-        } else {
-            const t = newUnknow(c)
-            c.tmap.set(n.value, t)
-            return t
-        }     
-
-    } else if (n.kind === "ASSIGNMENT_NODE") {
-        const a = get_type(c, n.value)
-        const b = get_type(c, n.name, a)
-
-        if (isUnknow(a) && !isUnknow(b)) {
-            set_type(c, a, b)
-        }
-
-        return a
-    } else if (n.kind === "OBJECT_NODE") {
-        if (c.tmap.has(n)) {
-            return c.tmap.get(n)!
-        }
-
-        if (e) {
-            c.tmap.set(n, e)
-            return e
-        } else {
-            const t = newUnknow(c)
-            set_type(c, n, t)
-            return t
-        }
-    } else if (n.kind === "RETURN_NODE") {
-        if (c.func.return) {
-            set_type(c, n.value, c.func.return)
-            get_type(c, n.value)
-            return c.func.return
-        } else {
-            return get_type(c, n.value)
-        }
-    } else if (n.kind === "CALL_NODE") {
-        const type_signature = get_type(c, n.func)
-
-        if (type_signature.name != "Fn" && type_signature.args.length !== 2) {
-            throw new Error("Uncallable!")
-        }
-
-        for (let i = 0; i < n.args.length; i++) {
-            set_type(c, n.args[i], type_signature.args[0].args[i])
-        }
-
-        return type_signature.args[1]
-    } else if (n.kind === "OP_NODE") {
-        const type_signature = c.tmap.get(n.op)!
-
-        if (type_signature.name != "Fn" && type_signature.args.length !== 2) {
-            throw new Error("Uncallable!")
-        }
-
-        return type_signature.args[1]
-    } else if (n.kind === "FIELD_NODE") {
-        const a = get_type(c, n.value)
-        return c.tmap.get(`${a.name}::${n.field}`)!
-    } else if (n.kind === "TERNARY_NODE") {
-        const b = get_type(c, n.b, e)
-        return get_type(c, n.a, b)
-    } else if (n.kind === "ARRAY_NODE") {
-        const item_type = get_type(c, n.items[0])
-
-        for (const item of n.items.slice(1)) {
-            set_type(c, item, item_type)
-        }
-
-        return Type("array", item_type)
-    } else if (n.kind === "JUMP_OP") {
-        return VoidType
-    } else if (n.kind === "BRANCH_SSA") {
-        return VoidType
-    } else if (n.kind === "INDEX_NODE") {
-        return get_type(c, n.value).args[0]
-    } else {
-        throw new Error("?????: " + n.kind)
     }
-}
 
-function collapseUnknowns(t: Types) {
-    for (let [key, value] of t.entries()) {
-        while (isUnknow(value)) {
-            const temp = t.get(format(value))
+    for (const func of file.items) {
+        const scope = func.name
+        const func_type = types.get(scope)!
 
-            if (!temp) {
-                log_types(t)
-                throw new Error(`Unknown type for ${format(key)}!`)
+        for (const stmt of func.body) {
+            const ctx = {
+                types,
+                links,
+                scope,
+            } 
+
+            if (stmt.kind === "ASSIGNMENT_NODE") {
+                types.set(`${scope}::${stmt.name}`, get_type_expr(ctx, stmt.value, new_unknown()))
             }
 
-            value = temp
+            if (stmt.kind === "RETURN_NODE") {
+                const return_type = func_type.args[func_type.args.length - 1]
+                get_type_expr(ctx, stmt.value, return_type)
+            }
         }
+    }
 
-        t.set(key, value)
+    for (const [k, v] of types.entries()) {
+        types.set(k, resolve(links, v)!)
+    }
+
+    return types
+}
+
+function resolve(links: [Type, Type][], type: Type): Type | undefined {
+    if (type.name.startsWith("T")) {
+        for (const [a, b] of links) {
+            if (eq(a, type)) {
+                const r = resolve(links, b)
+                if (r) {
+                    return r
+                }
+            }
+            if (eq(b, type)) {
+                const r = resolve(links, a)
+                if (r) {
+                    return r
+                }
+            }
+        }
+    } else {
+        return Type(type.name, type.args.map(arg => resolve(links, arg)!))
     }
 }
 
-export function check(globals: Types, func: FuncSSA) {
-    const ctx: Ctx = {
-        unknowns: 0,
-        func,
-        tmap: new Map()
+function get_type_expr(ctx: Ctx, expr: Expr, expected: Type): Type {
+    if (typeof expr === "number") {
+        return Type("int")
+    } else if (typeof expr === "string") {
+        const t = ctx.types.get(`${ctx.scope}::${expr}`) ?? ctx.types.get(expr)!
+        link(ctx, t, expected)
+        return t
+    } else {
+        const func_call_sig = Type("@fn", [
+            ...expr
+                .slice(1)
+                .map(e => get_type_expr(ctx, e, new_unknown())),
+            expected,
+        ])
+
+        const func = init(get_type_expr(ctx, expr[0], func_call_sig))
+
+        link(ctx, func, func_call_sig)
+
+        return func.args[func.args.length - 1] ?? expected
+    }
+}
+
+function clone(t: Type, r: Map<string, Type>): Type {
+    if (r.has(t.name)) {
+        return r.get(t.name)!
+    } else {
+        return Type(t.name, t.args.map(arg => clone(arg, r)))
+    }
+}
+
+function init(type: Type): Type {
+    const replacments = new Map()
+
+    for (const name of type.with) {
+        replacments.set(name, new_unknown())
     }
 
-    for (const [name, value] of globals) {
-        ctx.tmap.set(name, value)
-    }
+    return clone(type, replacments)
+}
 
-    for (const c of func.params) {
-        ctx.tmap.set(c.name, c.type)
-    }
-
-    for (const block of func.blocks) {
-        for (const stmt of block) {
-            get_type(ctx, stmt)
+function link(ctx: Ctx, a: Type, b: Type) {
+    if (a.name === "@fn" && b.name === "@fn") {
+        if (a.args.length != b.args.length) {
+            console.log("Wrong call!")
         }
+
+        for (let i = 0; i < a.args.length; i++) {
+            link(ctx, a.args[i], b.args[i])
+        }
+
+        return
     }
 
-    collapseUnknowns(ctx.tmap)
+    if (!eq(a, b)) {
+        // check if we already have this
+        for (const [pa, pb] of ctx.links) {
+            if ((eq(pa, a) && eq(pb, b)) || (eq(pa, b) && eq(pb, a))) {
+                return
+            }
+        }
 
-    return ctx.tmap
+        ctx.links.push([a, b])
+    }
+}
+
+function eq(a: object, b: object): boolean {
+    return JSON.stringify(a) == JSON.stringify(b)
+}
+
+let unknowns = 0
+function new_unknown(): Type {
+    return Type(`T${unknowns++}`)
+}
+
+function Type(name: string, args:Type[]=[], wit:string[]=[]): Type {
+    return {
+        kind: "TYPE",
+        name,
+        args,
+        with: wit,
+    }
 }

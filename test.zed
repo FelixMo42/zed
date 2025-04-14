@@ -1,12 +1,14 @@
 fn mag(p) {
-    return (sqrt (+ (** (p 0) 2) (** (p 1) 2)))
+    s1 = (** (p 0) 2)
+    s2 = (** (p 1) 2)
+    return (sqrt (+ s1 s2))
 }
 
 fn main() {
-    p = (array
+    arr = (array
         (array 6 0)
         (array 0 7)
     )
 
-    return (* (mag (p 0)) (mag (p 1)))
+    return (* (mag (arr 0)) (mag (arr 1)))
 }
