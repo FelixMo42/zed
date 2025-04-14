@@ -1,6 +1,5 @@
 import { format, log_types } from "../util/format.ts";
 import { FuncSSA, Module, StatmentSSA } from "./lower.ts";
-import { global_types } from "./lib.ts";
 import { ExprNode, StatmentNode, TypeNode } from "./parse.ts";
 
 /// Common
@@ -27,10 +26,6 @@ function eq(a: object, b: object) {
 
 export function build_module_types(file: Module): Types {
     const types = new Map<string, TypeNode>()
-
-    for (const [name, type] of global_types) {
-        types.set(name, type)
-    }
 
     file.items.forEach((n) => {
         if (n.kind === "FUNC_SSA") {

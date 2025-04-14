@@ -1,16 +1,12 @@
-struct Vec2 {
-    x int
-    y int
+fn mag(p) {
+    return (sqrt (+ (** (p 0) 2) (** (p 1) 2)))
 }
 
-fn mag(p Vec2) int {
-    return sqrt(p.x ** 2 + p.y ** 2)
-}
+fn main() {
+    p = (array
+        (array 6 0)
+        (array 0 7)
+    )
 
-fn main() int {
-    p = [
-        { x: 6, y: 0 }
-        { x: 0, y: 7 }
-    ]
-    return mag(p[0]) * mag(p[1])
+    return (* (mag (p 0)) (mag (p 1)))
 }

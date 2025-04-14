@@ -4,17 +4,21 @@ export interface TokenStream {
     save(): number
     load(i: number): void
     logs(): void
+    done(): boolean
 }
 
 export function lexer(src: string): TokenStream {
     const tokens = src
-        .matchAll(/\"[^\"]*\"|[\w]+|<=|>=|==|\*\*|[^\s\w]/g)
+        .matchAll(/[\w]+|\(|\)|[^\s\w]+/g)
         .toArray()
         .map(match => match[0])
 
     let index = 0
 
     const self = {
+        done() {
+            return index >= tokens.length
+        },
         logs() {
             console.log(tokens)
         },
@@ -26,13 +30,8 @@ export function lexer(src: string): TokenStream {
         peak(match: string) {
             if (!match) {
                 return tokens[index]
-            } else if (match === "<string>") {
-                if (tokens[index].startsWith("\"")) {
-                    const len = tokens[index].length
-                    return tokens[index].substring(1, len - 1)
-                }
             } else if (match === "<ident>") {
-                if (isIdent(tokens[index])) {
+                if (!isNumeric(tokens[index])) {
                     return tokens[index]
                 }
             } else if (match === "<number>") {
@@ -52,10 +51,6 @@ export function lexer(src: string): TokenStream {
     }
 
     return self
-}
-
-function isIdent(str: string) {
-    return /^[a-zA-Z_][a-zA-Z_\d]*$/.test(str)
 }
 
 function isNumeric(str: string) {

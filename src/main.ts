@@ -1,8 +1,6 @@
 import { lexer } from "./lang/lexer.ts";
 import { parse } from "./lang/parse.ts";
-import { lower } from "./lang/lower.ts";
-import { build } from "./lang/build.ts";
-import { runit } from "./lang/runit.ts";
+import { runer } from "./lang/runer.ts";
 import { format } from "./util/format.ts";
 
 async function main() {
@@ -12,18 +10,10 @@ async function main() {
     console.log("#AST")
     const ast = parse(tks)!
     console.log(format(ast))
-    
-    console.log(`#SSA`)
-    const ssa = lower(ast)
-    console.log(format(ssa))
-
-    console.log(`#BIN`)
-    const bin = build(ssa)
-    console.log(format(bin))
 
     console.log("#OUT")
-    const out = runit(bin)
-    console.log(out)
+    const out = runer(ast)
+    console.log(format(out))
 }
 
 main()
