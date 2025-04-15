@@ -1,4 +1,5 @@
 import { Expr, FileNode } from "./parse.ts";
+import { builtins } from "./scope.ts";
 
 export type Type = {
     kind: "TYPE",
@@ -10,16 +11,9 @@ export type Type = {
 function root() {
     const types = new Map<string, Type>()
 
-    types.set("+", Type("@fn", [ Type("int"), Type("int"), Type("int") ]))
-    types.set("-", Type("@fn", [ Type("int"), Type("int"), Type("int") ]))
-    types.set("*", Type("@fn", [ Type("int"), Type("int"), Type("int") ]))
-    types.set("/", Type("@fn", [ Type("int"), Type("int"), Type("int") ]))
-    types.set("**", Type("@fn", [ Type("int"), Type("int"), Type("int") ]))
-    types.set("sqrt", Type("@fn", [ Type("int"), Type("int") ]))
-    types.set("array", Type("@fn", [
-        Type("#1"), Type("#1"),
-        Type("@fn", [ Type("int"), Type("#1") ])
-    ], ["#1"]))
+    for (const builtin of builtins) {
+        types.set(builtin[0], builtin[1])
+    }
 
     return types
 }
@@ -176,7 +170,7 @@ function new_unknown(): Type {
     return Type(`T${unknowns++}`)
 }
 
-function Type(name: string, args:Type[]=[], wit:string[]=[]): Type {
+export function Type(name: string, args:Type[]=[], wit:string[]=[]): Type {
     return {
         kind: "TYPE",
         name,

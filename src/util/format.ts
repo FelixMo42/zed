@@ -2,7 +2,7 @@
 
 import { FileNode, FuncNode, StatmentNode } from "../lang/parse.ts";
 import { Expr } from "../lang/parse.ts";
-import { Type } from "../main.ts";
+import { Type } from "../lang/types.ts";
 
 type Formatable
     = string
@@ -28,9 +28,11 @@ export function format(v: Formatable): string {
     if (typeof v === "number") return String(v)
     if (typeof v === "boolean") return String(v)
     if (typeof v === "function") return String(v)
-    if (Array.isArray(v)) return `(${v.map(format).join(" ")})`
+    if (Array.isArray(v)) return `${format(v[0])}(${v.slice(1).map(format).join(" ")})`
 
-    if (v.kind == "TYPE") {
+    if (v.kind == "DISCARD_NODE") {
+        return `^${format(v.value)}`
+    } else if (v.kind == "TYPE") {
         if (v.args.length === 0) {
             return v.name
         }

@@ -9,7 +9,7 @@ export interface TokenStream {
 
 export function lexer(src: string): TokenStream {
     const tokens = src
-        .matchAll(/[\w]+|\(|\)|[^\s\w]+/g)
+        .matchAll(/[\w]+|\(|\)|[^\s\w\(\)]+/g)
         .toArray()
         .map(match => match[0])
 
@@ -31,6 +31,10 @@ export function lexer(src: string): TokenStream {
             if (!match) {
                 return tokens[index]
             } else if (match === "<ident>") {
+                if (tokens[index] == "(" || tokens[index] == ")") {
+                    return undefined
+                }
+        
                 if (!isNumeric(tokens[index])) {
                     return tokens[index]
                 }
